@@ -34,7 +34,7 @@ def getMaxID(response):
 
 def parseTweetStatuses(response, user_id_list):
     for tweet in response[STATUSES]:
-        if tweet[USER][USERID] not in user_id_list:
+        if tweet[USER][USERID] not in user_id_list and tweet[USER][USERURL]:
             user_id_list.append(tweet[USER][USERID])
             writeExcelSheet(tweet[USER], tweet[USER][USERID], tweet[MESSAGE],
                     tweet[USER][USERURL])
