@@ -7,7 +7,10 @@ from urlunshort import resolve
 from urlparse import urlsplit
 from bs4 import BeautifulSoup
 import os
+import re
 import requests
+from requests.exceptions import ConnectionError
+
 
 CONSUMER_KEY    = "oFnKOZ1a4BJMOMjCkJbb7rv2i"
 CONSUMER_SECRET = "8V6V7w26vy0kUl99vNmZg3Fod8RLl1nLuxslDhh0T0BwhxN6mD"
@@ -36,7 +39,7 @@ ROW_WHOIS = 'Whois Mail'
 ROW_CONTACT_FORM = 'Link to Contact Form'
 SHEET_NAME = 'Sheet'
 
-KNOWN_WEBSITES = ['facebook', 'instagram', 'youtube', 'twitter', 'pinterest', 'github']
+KNOWN_WEBSITES = ['facebook', 'instagram', 'youtube', 'twitter', 'pinterest', 'github', 'tumblr']
 
 def createExcelFile():
     wb = Workbook()
@@ -88,22 +91,62 @@ def getMaxID(response):
     maxId = response[META][NEXTRESULT].split('&')[0].split('?max_id=')[1]
     return maxId
 
-def unshortenURL(url):
-    return resolve(url) 
+def validateLink(link):
+    pass    
+
+def extractLinks(response):
+    soup = BeautifulSoup(response.text, 'html.parser')
+    links = {}
+    for a in soup.findAll('a', href = re.compile('https?://[^\s<>"]+|www\.[^\s<>"]+')):
+        if 'href' in a.attrs:
+            #links.append(a.attrs['href'])
+            print a.attrs['href']
+
+def checkHostname(hostname):
+    for h in KNOWN_WEBSITES:
+        if h in hostname:
+            return False
+    return True
+
+def verifyUrl(url):
+    resolved_url = resolve(url)
+    if resolved_url is not None:
+        parts = urlsplit(resolved_url)
+        hostname = parts.hostname
+        valid = checkHostname(hostname)
+        if valid: 
+            base_url = "{0.scheme}://{0.netloc}".format(parts)
+            return base_url
+        else:
+            return None
+    else:
+        parts = urlsplit(url)
+        hostname = parts.hostname.split('.')[1]
+        if hostname not in KNOWN_WEBSITES: 
+            base_url = "{0.scheme}://{0.netloc}".format(parts)
+            return base_url
+        else:
+            return None
+
+def requestUrl(url):
+    try:
+        return requests.get(url)
+    except:
+        print "Website not responding"
+        return None
+
+def processUrl(url):
+    base_url = verifyUrl(url)
+    if base_url is not None:
+        response = requestUrl(base_url)
+        if response is not None:
+            print "DOMAIN: %s" %base_url
+            extractLinks(response)
+    else:
+        print "Known Website"
 
 def getMail(url):
-    url = unshortenURL(url)
-    parts = urlsplit(url)
-    if parts.hostname.split('.')[1] not in KNOWN_WEBSITES:
-        base_url = "{0.scheme}://{0.netloc}".format(parts)
-        print "Scannig Domain %s" %base_url
-        response = requests.get(base_url)
-        soup = BeautifulSoup(response.text, "html.parser")
-        links = {}
-        for a in soup.findAll("a"):
-            if 'href' in a.attrs:
-                print a['href']
-    print "DONE NEXT!"
+    processUrl(url)
 
 def testLimit(tweetobj):
     response = tweetobj.search(q='baby', count = 100)
@@ -119,7 +162,6 @@ def testLimit(tweetobj):
         print len(user_id_list)
         maxID = getMaxID(response)
         response = tweetobj.search(q='baby', max_id=maxID, count = 100)
-        
 
 def parseTweetStatuses(response, keyword):
     user_id_list = []
