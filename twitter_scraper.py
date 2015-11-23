@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import sys
 import time
 from twython import Twython, TwythonError
 from openpyxl import load_workbook, Workbook
@@ -39,7 +40,9 @@ ROW_WHOIS = 'Whois Mail'
 ROW_CONTACT_FORM = 'Link to Contact Form'
 SHEET_NAME = 'Sheet'
 
-KNOWN_WEBSITES = ['facebook', 'instagram', 'youtube', 'twitter', 'pinterest', 'github', 'tumblr']
+KNOWN_WEBSITES = ['facebook', 'instagram', 'youtube', 'twitter', 'pinterest', 'github', 'tumblr', \
+        'yahoo', 'soundcloud', 'amazon', 'apple', 'itunes', 'mtv', 'play.google', 'ask.fm', \
+        'soundclick', 'bbc.co', 'news', 'google']
 
 def createExcelFile():
     wb = Workbook()
@@ -92,15 +95,22 @@ def getMaxID(response):
     return maxId
 
 def validateLink(link):
-    pass    
+    for h in KNOWN_WEBSITES:
+        if h in link:
+            return False
+    return True
 
 def extractLinks(response):
     soup = BeautifulSoup(response.text, 'html.parser')
-    links = {}
+    links = set()
     for a in soup.findAll('a', href = re.compile('https?://[^\s<>"]+|www\.[^\s<>"]+')):
         if 'href' in a.attrs:
-            #links.append(a.attrs['href'])
-            print a.attrs['href']
+            is_valid = validateLink(a.attrs['href'])
+            if is_valid:
+                links.add(a.attrs['href'])
+            else:
+                continue
+    return links
 
 def checkHostname(hostname):
     for h in KNOWN_WEBSITES:
@@ -140,13 +150,14 @@ def processUrl(url):
     if base_url is not None:
         response = requestUrl(base_url)
         if response is not None:
-            print "DOMAIN: %s" %base_url
-            extractLinks(response)
+            print "Invasting Links for Domain: %s" %base_url
+            return extractLinks(response)
     else:
-        print "Known Website"
+        print "Invalid Website"
 
 def getMail(url):
-    processUrl(url)
+    links = processUrl(url)
+    print links
 
 def testLimit(tweetobj):
     response = tweetobj.search(q='baby', count = 100)
