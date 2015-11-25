@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 import os
 import re
 import requests
-from requests.exceptions import ConnectionError, MissingSchema, InvalidSchema
+from requests.exceptions import ConnectionError, MissingSchema, InvalidSchema, ReadTimeout
 
 CONSUMER_KEY    = "oFnKOZ1a4BJMOMjCkJbb7rv2i"
 CONSUMER_SECRET = "8V6V7w26vy0kUl99vNmZg3Fod8RLl1nLuxslDhh0T0BwhxN6mD"
@@ -148,7 +148,7 @@ def verifyUrl(url):
 def requestUrl(url):
     try:
         return requests.get(url, timeout=(5, 30))
-    except (InvalidSchema, MissingSchema, ConnectionError) as e:
+    except (InvalidSchema, MissingSchema, ReadTimeout, ConnectionError) as e:
         print "Website not responding Skipping..."
         print e
         return None
@@ -169,7 +169,7 @@ def extractMailfromLinks(links):
         print "Searching for e-mail from Link: %s" %link
         try:
             response = requests.get(link.strip(), timeout=(5, 30))
-        except (InvalidSchema, MissingSchema, ConnectionError) as e:
+        except (InvalidSchema, MissingSchema, ReadTimeout, ConnectionError) as e:
             print "Invalid Link Skipping..."
             print e
             continue
@@ -202,8 +202,8 @@ def testLimit(tweetobj):
         maxID = getMaxID(response)
         response = tweetobj.search(q='baby', max_id=maxID, count = 100)
 
-def parseTweetStatuses(response, keyword):
-    user_id_list = []
+def parseTweetStatuses(response, keyword, user_id_list):
+    user_id_list = user_id_list 
     for tweet in response[STATUSES]:
         if tweet[USER][USERID] not in user_id_list and tweet[USER][USERURL]:
             user_id_list.append(tweet[USER][USERID])
@@ -227,7 +227,7 @@ def mainScraping(tweetobj, keyword, limit=None):
         while NEXTRESULT in response[META]:
             maxId = getMaxID(response) 
             response = tweetobj.search(q=keyword, max_id=maxId)
-            user_id_list = parseTweetStatuses(response, keyword)
+            user_id_list = parseTweetStatuses(response, keyword, user_id_list)
 
 def main():
     keyphrase = raw_input("Enter Keyword to scrape for: ")
