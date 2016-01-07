@@ -2,7 +2,9 @@
 import sys
 import time
 import datetime
-from twython import Twython, TwythonError
+from twython import Twython, TwythonError, TwythonRateLimitError
+from ignoreconstants import ignore_openpyxl_constants
+ignore_openpyxl_constants()
 from openpyxl import load_workbook, Workbook
 from openpyxl.styles import Style, Font
 from urlunshort import resolve
@@ -11,12 +13,13 @@ from bs4 import BeautifulSoup
 import os
 import re
 import requests
-from requests.exceptions import ConnectionError, MissingSchema, InvalidSchema, ReadTimeout
+from requests.exceptions import ConnectionError, MissingSchema, InvalidSchema, ReadTimeout,\
+        TooManyRedirects, InvalidURL
 
-CONSUMER_KEY    = "oFnKOZ1a4BJMOMjCkJbb7rv2i"
-CONSUMER_SECRET = "8V6V7w26vy0kUl99vNmZg3Fod8RLl1nLuxslDhh0T0BwhxN6mD"
-TOKEN_KEY       = "93475883-sypM3QYTxvr6UI5OkC3LGFxG4PrbdjUnZNaoj7hOp"
-TOKEN_SECRET    = "t1t0lLVsgS7Skxz1M5yVikfTvDTX8oZILbVoMqT2ubSDH"
+CONSUMER_KEY    = "jJc9gVd4GhVpWkoTKRThJmgtg"
+CONSUMER_SECRET = "OlNRGpQaXTGj7gIs3FRoxa1hCCoY1VEAMVSThlf9qvzCKkrnSN"
+TOKEN_KEY       = "4517074753-t7foTG8zbKyUntKIq6ctam7a2BLoITwPvpR4Ihn"
+TOKEN_SECRET    = "UI8czuIJ4l2vHwD9Rb5cdDPq2KZd3LpzMHKQ5MlvdEW45"
 
 USER = 'user'
 USERID = 'id_str'
@@ -36,7 +39,6 @@ ROW_KEYPHRASE = 'Keyphrase'
 ROW_DATA_RETRIEVED = 'Data Retrieved'
 ROW_WEBSITE = 'Website from User'
 ROW_MAIL = 'E-Mail from Website'
-ROW_CONTACT_FORM = 'Link to Contact Form'
 SHEET_NAME = 'Sheet'
 #MAIL_REGEX = re.compile('[a-z0-9\.\-+_]+@[a-z0-9\.\-+_]+\.[a-z]+')
 MAIL_REGEX = re.compile('[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$')
@@ -57,7 +59,6 @@ def createExcelFile():
     ws.cell(row=1, column=5, value=ROW_DATA_RETRIEVED).font = Font(bold=True)
     ws.cell(row=1, column=6, value=ROW_WEBSITE).font = Font(bold=True)
     ws.cell(row=1, column=7, value=ROW_MAIL).font = Font(bold=True)
-    ws.cell(row=1, column=8, value=ROW_CONTACT_FORM).font = Font(bold=True)
     wb.save(EXCELFILE)
 
     return wb, ws
@@ -92,9 +93,6 @@ def writeCells(ws, user_id, username, message, keyword, url, email):
     sheet_copy.cell(row=row_number, column=6, value=url)
     sheet_copy.cell(row=row_number, column=7, value=email)
     return sheet_copy
-
-def saveExcelSheet():
-    pass
 
 def getMaxID(response):
     maxId = response[META][NEXTRESULT].split('&')[0].split('?max_id=')[1]
@@ -148,7 +146,7 @@ def verifyUrl(url):
 def requestUrl(url):
     try:
         return requests.get(url, timeout=(5, 30))
-    except (InvalidSchema, MissingSchema, ReadTimeout, ConnectionError) as e:
+    except (InvalidSchema, MissingSchema, ReadTimeout, InvalidURL, ConnectionError) as e:
         print "Website not responding Skipping..."
         print e
         return None
@@ -169,7 +167,7 @@ def extractMailfromLinks(links):
         print "Searching for e-mail from Link: %s" %link
         try:
             response = requests.get(link.strip(), timeout=(5, 30))
-        except (InvalidSchema, MissingSchema, ReadTimeout, ConnectionError) as e:
+        except (InvalidSchema, MissingSchema, ReadTimeout, ConnectionError, TooManyRedirects) as e:
             print "Invalid Link Skipping..."
             print e
             continue
@@ -188,20 +186,6 @@ def getMail(url):
     else:
         return None
 
-def testLimit(tweetobj):
-    response = tweetobj.search(q='baby', count = 100)
-    maxID = getMaxID(response)
-    user_id_list = []
-    while NEXTRESULT in response[META]:
-        for tweet in response[STATUSES]:
-            if tweet[USER][USERID] not in user_id_list and tweet[USER][USERURL]:
-                user_id_list.append(tweet[USER][USERID])
-                getMail(tweet[USER][USERURL]) 
-            else:
-                continue
-        maxID = getMaxID(response)
-        response = tweetobj.search(q='baby', max_id=maxID, count = 100)
-
 def parseTweetStatuses(response, keyword, user_id_list):
     user_id_list = user_id_list 
     for tweet in response[STATUSES]:
@@ -217,23 +201,49 @@ def parseTweetStatuses(response, keyword, user_id_list):
             continue
     return user_id_list
 
-def mainScraping(tweetobj, keyword, limit=None):
-    user_id_list = []
+def mainScraping(tweetobj, keyword, limit=None, user_id_list = [], r_type='recent'):
+    #user_id_list = []
     if limit:
         response = tweetobj.search(q=keyword, count=limit)
         parseTweetStatuses(response, keyword)
     else:
-        response = tweetobj.search(q=keyword)
-        while NEXTRESULT in response[META]:
-            maxId = getMaxID(response) 
-            response = tweetobj.search(q=keyword, max_id=maxId)
-            user_id_list = parseTweetStatuses(response, keyword, user_id_list)
+        try:
+            response = tweetobj.search(q=keyword, result_type=r_type, count=100)
+            while NEXTRESULT in response[META].keys():
+                maxId = getMaxID(response) 
+                response = tweetobj.search(q=keyword, result_type=r_type, max_id=int(maxId)-1, count=100)
+                user_id_list = parseTweetStatuses(response, keyword, user_id_list)
+        except TwythonRateLimitError as e:
+            remaining = float(tweetobj.get_lastfunction_header(header='x-rate-limit-reset')) - time.time()
+            print "Twitter Rate Limit Exceeded! Sleeping for %.2f sec." %remaining
+            time.sleep(remaining)
+            mainScraping(tweetobj, keyword, user_id_list, r_type)
+        except TwythonError as e:
+            print "Twitter disconnected, reconnecting..."
+            reconnectToTwitter(keyword, user_id_list, r_type)
+            
+def reconnectToTwitter(keyword, user_id_list, r_type):
+    tweetobj = Twython(CONSUMER_KEY, CONSUMER_SECRET, TOKEN_KEY, TOKEN_SECRET, client_args={'headers':{'User-Agent': 'MFResearch'}})
+    mainScraping(tweetobj, keyword, user_id_list = user_id_list, r_type=r_type)
 
 def main():
     keyphrase = raw_input("Enter Keyword to scrape for: ")
-    tweetobj = Twython(CONSUMER_KEY, CONSUMER_SECRET, TOKEN_KEY, TOKEN_SECRET)
-    mainScraping(tweetobj, keyword=keyphrase)
-    #testLimit(tweetobj)
+    result_type = raw_input("Select the Result Type [r]ecent, [m]ixed, [p]opular:")
+    if result_type in ['r', 'm', 'p']:
+        if result_type == 'r':
+            result_type = 'recent'
+        elif result_type == 'm':
+            result_type = 'mixed'
+        else:
+            result_type = 'popular'
 
+        tweetobj = Twython(CONSUMER_KEY, CONSUMER_SECRET, TOKEN_KEY, TOKEN_SECRET, client_args={'headers':{'User-Agent': 'MFResearch'}})
+        mainScraping(tweetobj, keyword=keyphrase)
+        print "********************************************"
+        print "Scraping finished for keyword %s" %keyphrase
+        print "All possible tweets retrieved for this run"
+    else:
+        print "You Entered a invalid Result Type!!!"
+    
 if __name__ == "__main__":
     main()
