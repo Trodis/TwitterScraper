@@ -16,10 +16,10 @@ import requests
 from requests.exceptions import ConnectionError, MissingSchema, InvalidSchema, ReadTimeout,\
         TooManyRedirects, InvalidURL
 
-CONSUMER_KEY    = "jJc9gVd4GhVpWkoTKRThJmgtg"
-CONSUMER_SECRET = "OlNRGpQaXTGj7gIs3FRoxa1hCCoY1VEAMVSThlf9qvzCKkrnSN"
-TOKEN_KEY       = "4517074753-t7foTG8zbKyUntKIq6ctam7a2BLoITwPvpR4Ihn"
-TOKEN_SECRET    = "UI8czuIJ4l2vHwD9Rb5cdDPq2KZd3LpzMHKQ5MlvdEW45"
+CONSUMER_KEY    = ""
+CONSUMER_SECRET = ""
+TOKEN_KEY       = ""
+TOKEN_SECRET    = ""
 
 USER = 'user'
 USERID = 'id_str'
